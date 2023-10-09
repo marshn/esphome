@@ -136,92 +136,89 @@ optional<DraytonData> DraytonProtocol::decode(RemoteReceiveData src) {
   };
 
   while (src.size() - src.get_index() > MIN_RX_SRC) {
-	  
-	  ESP_LOGVV(TAG, "Decode Drayton: %d, %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", src.size() - src.get_index(),
-				src.peek(0), src.peek(1), src.peek(2), src.peek(3), src.peek(4), src.peek(5), src.peek(6), src.peek(7),
-				src.peek(8), src.peek(9), src.peek(10), src.peek(11), src.peek(12), src.peek(13), src.peek(14),
-				src.peek(15), src.peek(16), src.peek(17), src.peek(18), src.peek(19));
+    ESP_LOGVV(TAG, "Decode Drayton: %d, %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+              src.size() - src.get_index(), src.peek(0), src.peek(1), src.peek(2), src.peek(3), src.peek(4),
+              src.peek(5), src.peek(6), src.peek(7), src.peek(8), src.peek(9), src.peek(10), src.peek(11), src.peek(12),
+              src.peek(13), src.peek(14), src.peek(15), src.peek(16), src.peek(17), src.peek(18), src.peek(19));
 
-	  // If first preamble item is a space, skip it
-	  if (src.peek_space_at_least(1)) {
-		src.advance(1);
-	  }
+    // If first preamble item is a space, skip it
+    if (src.peek_space_at_least(1)) {
+      src.advance(1);
+    }
 
-	  // Look for sync pulse, after. If sucessful index points to space of sync symbol
-	  while (src.size() - src.get_index() >= NDATABITS) {
-		ESP_LOGVV(TAG, "Decode Drayton: sync search %d, %d %d", src.size() - src.get_index(), src.peek(), src.peek(1));
-		if (src.peek_mark(2 * BIT_TIME_US) &&
-			(src.peek_space(2 * BIT_TIME_US, 1) || src.peek_space(3 * BIT_TIME_US, 1))) {
-		  src.advance(1);
-		  ESP_LOGVV(TAG, "Decode Drayton: Found SYNC, - %d", src.get_index());
-		  break;
-		}
-		else {
-		  src.advance(2);
-		}
-	  }
+    // Look for sync pulse, after. If sucessful index points to space of sync symbol
+    while (src.size() - src.get_index() >= NDATABITS) {
+      ESP_LOGVV(TAG, "Decode Drayton: sync search %d, %d %d", src.size() - src.get_index(), src.peek(), src.peek(1));
+      if (src.peek_mark(2 * BIT_TIME_US) &&
+          (src.peek_space(2 * BIT_TIME_US, 1) || src.peek_space(3 * BIT_TIME_US, 1))) {
+        src.advance(1);
+        ESP_LOGVV(TAG, "Decode Drayton: Found SYNC, - %d", src.get_index());
+        break;
+      } else {
+        src.advance(2);
+      }
+    }
 
-      // No point continuing if not enough samples remaining to complete a packet
-	  if (src.size() - src.get_index() < NDATABITS) {
-		ESP_LOGV(TAG, "Decode Drayton: Fail 1, - %d", src.get_index());
-		break;
-	  }
-	  
-	  // Read data. Index points to space of sync symbol
-	  // Extract first bit
-	  // Checks next bit to leave index pointing correctly
-	  uint32_t out_data = 0;
-	  uint8_t bit = NDATABITS - 1;
-	  ESP_LOGVV(TAG, "Decode Drayton: first bit %d  %d %d", src.peek(0), src.peek(1), src.peek(2));
-	  if (src.expect_space(3 * BIT_TIME_US) && (src.expect_mark(BIT_TIME_US) || src.peek_mark(2 * BIT_TIME_US))) {
-		out_data |= 0 << bit;
-	  } else if (src.expect_space(2 * BIT_TIME_US) && src.expect_mark(BIT_TIME_US) &&
-				 (src.expect_space(BIT_TIME_US) || src.peek_space(2 * BIT_TIME_US))) {
-		out_data |= 1 << bit;
-	  } else {
-		ESP_LOGV(TAG, "Decode Drayton: Fail 2, - %d %d %d", src.peek(-1), src.peek(0), src.peek(1));
-		continue;
-	  }
+    // No point continuing if not enough samples remaining to complete a packet
+    if (src.size() - src.get_index() < NDATABITS) {
+      ESP_LOGV(TAG, "Decode Drayton: Fail 1, - %d", src.get_index());
+      break;
+    }
 
-	  // Before/after each bit is read the index points to the transition at the start of the bit period or,
-	  // if there is no transition at the start of the bit period, then the transition in the middle of
-	  // the previous bit period.
-	  while (--bit >= 1) {
-		ESP_LOGVV(TAG, "Decode Drayton: Data, %2d %08x", bit, out_data);
-		if ((src.expect_space(BIT_TIME_US) || src.expect_space(2 * BIT_TIME_US)) &&
-			(src.expect_mark(BIT_TIME_US) || src.peek_mark(2 * BIT_TIME_US))) {
-		  out_data |= 0 << bit;
-		} else if ((src.expect_mark(BIT_TIME_US) || src.expect_mark(2 * BIT_TIME_US)) &&
-				   (src.expect_space(BIT_TIME_US) || src.peek_space(2 * BIT_TIME_US))) {
-		  out_data |= 1 << bit;
-		} else {
-		  break;
-		}
-	  }
-	  
-	  if (bit > 0) {
-		ESP_LOGVV(TAG, "Decode Drayton: Fail 3, %d %d %d", src.peek(-1), src.peek(0), src.peek(1));
-		continue;
-	  }
+    // Read data. Index points to space of sync symbol
+    // Extract first bit
+    // Checks next bit to leave index pointing correctly
+    uint32_t out_data = 0;
+    uint8_t bit = NDATABITS - 1;
+    ESP_LOGVV(TAG, "Decode Drayton: first bit %d  %d %d", src.peek(0), src.peek(1), src.peek(2));
+    if (src.expect_space(3 * BIT_TIME_US) && (src.expect_mark(BIT_TIME_US) || src.peek_mark(2 * BIT_TIME_US))) {
+      out_data |= 0 << bit;
+    } else if (src.expect_space(2 * BIT_TIME_US) && src.expect_mark(BIT_TIME_US) &&
+               (src.expect_space(BIT_TIME_US) || src.peek_space(2 * BIT_TIME_US))) {
+      out_data |= 1 << bit;
+    } else {
+      ESP_LOGV(TAG, "Decode Drayton: Fail 2, - %d %d %d", src.peek(-1), src.peek(0), src.peek(1));
+      continue;
+    }
 
-	  if (src.expect_space(BIT_TIME_US) || src.expect_space(2 * BIT_TIME_US)) {
-		out_data |= 0;
-	  } else if (src.expect_mark(BIT_TIME_US) || src.expect_mark(2 * BIT_TIME_US)) {
-		out_data |= 1;
-	  }
-      else {
-		continue;
-	  }
-	  
-	  ESP_LOGV(TAG, "Decode Drayton: Data, %2d %08x", bit, out_data);
+    // Before/after each bit is read the index points to the transition at the start of the bit period or,
+    // if there is no transition at the start of the bit period, then the transition in the middle of
+    // the previous bit period.
+    while (--bit >= 1) {
+      ESP_LOGVV(TAG, "Decode Drayton: Data, %2d %08x", bit, out_data);
+      if ((src.expect_space(BIT_TIME_US) || src.expect_space(2 * BIT_TIME_US)) &&
+          (src.expect_mark(BIT_TIME_US) || src.peek_mark(2 * BIT_TIME_US))) {
+        out_data |= 0 << bit;
+      } else if ((src.expect_mark(BIT_TIME_US) || src.expect_mark(2 * BIT_TIME_US)) &&
+                 (src.expect_space(BIT_TIME_US) || src.peek_space(2 * BIT_TIME_US))) {
+        out_data |= 1 << bit;
+      } else {
+        break;
+      }
+    }
 
-	  out.channel = (uint8_t) (out_data & 0x1F);
-	  out_data >>= NBITS_CHANNEL;
-	  out.command = (uint8_t) (out_data & 0x7F);
-	  out_data >>= NBITS_COMMAND;
-	  out.address = (uint16_t) (out_data & 0xFFFF);
+    if (bit > 0) {
+      ESP_LOGVV(TAG, "Decode Drayton: Fail 3, %d %d %d", src.peek(-1), src.peek(0), src.peek(1));
+      continue;
+    }
 
-	  return out;
+    if (src.expect_space(BIT_TIME_US) || src.expect_space(2 * BIT_TIME_US)) {
+      out_data |= 0;
+    } else if (src.expect_mark(BIT_TIME_US) || src.expect_mark(2 * BIT_TIME_US)) {
+      out_data |= 1;
+    } else {
+      continue;
+    }
+
+    ESP_LOGV(TAG, "Decode Drayton: Data, %2d %08x", bit, out_data);
+
+    out.channel = (uint8_t) (out_data & 0x1F);
+    out_data >>= NBITS_CHANNEL;
+    out.command = (uint8_t) (out_data & 0x7F);
+    out_data >>= NBITS_COMMAND;
+    out.address = (uint16_t) (out_data & 0xFFFF);
+
+    return out;
   }
   return {};
 }
